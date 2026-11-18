@@ -1,0 +1,12 @@
+.env
+.env.*
+!.env.example
+.build/
+target/
+vendor/
+node_modules/
+artifacts/screenshots/
+artifacts/logs/
+artifacts/test-results/
+*.zip
+__pycache__/

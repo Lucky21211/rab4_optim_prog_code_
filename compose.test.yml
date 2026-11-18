@@ -1,0 +1,85 @@
+name: cassiopeia_pr4_test
+services:
+  mock:
+    image: python:3.12-alpine
+    working_dir: /tests
+    command: ["python", "mock_server.py"]
+    environment:
+      FIXTURE_PUBLIC_ORIGIN: ${FIXTURE_PUBLIC_ORIGIN:-http://localhost:18080}
+    volumes: [./tests:/tests:ro]
+    networks: [backend]
+  rust_iss:
+    environment:
+      WHERE_ISS_URL: http://mock:8080/iss
+      NASA_API_URL: http://mock:8080/osdr
+      APOD_URL: http://mock:8080/apod
+      NEO_URL: http://mock:8080/neo
+      FLR_URL: http://mock:8080/flr
+      CME_URL: http://mock:8080/cme
+      SPACEX_URL: http://mock:8080/spacex
+      JWST_HOST: http://mock:8080/jwst
+      ASTRO_URL: http://mock:8080/astro
+      ASTRO_APP_ID: fixture-user
+      ASTRO_APP_SECRET: fixture-password-not-a-real-secret
+      SCHEDULER_ENABLED: "false"
+      RATE_LIMIT_MS: 1
+      HTTP_TIMEOUT_SECONDS: 2
+    ports: !override ["127.0.0.1:18081:3000"]
+    depends_on:
+      mock: {condition: service_started}
+  nginx:
+    ports: !override ["127.0.0.1:18080:80"]
+  php:
+    environment:
+      APP_URL: http://localhost:18080
+      READ_CACHE_TTL: 2
+      GALLERY_CACHE_TTL: 120
+  pascal_legacy:
+    environment:
+      LEGACY_CRON: "0 0 31 2 *"
+  tests:
+    profiles: [test]
+    build:
+      context: .
+      dockerfile: tests/Dockerfile
+    environment:
+      INTEGRATION: "true"
+      WEB_URL: http://nginx
+      RUST_URL: http://rust_iss:3000
+      MOCK_URL: http://mock:8080
+      PGHOST: db
+      PGUSER: ${POSTGRES_USER:-monouser}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      PGDATABASE: ${POSTGRES_DB:-monolith}
+    depends_on:
+      php: {condition: service_healthy}
+      mock: {condition: service_started}
+      nginx: {condition: service_started}
+    networks: [backend]
+  rust_tests:
+    profiles: [test]
+    build:
+      context: ./services/rust-iss
+      target: test
+  php_tests:
+    profiles: [test]
+    build: ./services/php-web
+    environment:
+      SKIP_MIGRATIONS: "true"
+      APP_ENV: testing
+      APP_KEY: ${APP_KEY:?Set APP_KEY}
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+    command: ["php", "artisan", "test", "--display-warnings", "--display-phpunit-deprecations"]
+  browser:
+    profiles: [test]
+    build:
+      context: .
+      dockerfile: tests/browser.Dockerfile
+    environment:
+      WEB_URL: http://nginx
+    volumes: [./artifacts:/artifacts]
+    depends_on:
+      php: {condition: service_healthy}
+      nginx: {condition: service_started}
+    networks: [backend]

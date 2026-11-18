@@ -1,0 +1,7 @@
+name: cassiopeia_pr4_setup
+services:
+  init:
+    image: python:3.12-alpine
+    working_dir: /project
+    command: ["python", "tools/init_env.py"]
+    volumes: [.:/project]
